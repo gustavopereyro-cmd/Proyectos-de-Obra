@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Control de Obra — Gantt Multiproyecto</title>
+<style>
+:root{
+  --bg:#f0f2f5; --panel:#ffffff; --panel2:#f5f7fa; --line:#dde1e9;
+  --ink:#1a2035; --ink-dim:#6b7590; --gold:#b8892a; --teal:#1e9e8f;
+  --green:#2d8a58; --gray:#8a94a8; --red:#c0392b;
+  --mono:'JetBrains Mono','SF Mono',monospace; --sans:'Inter',-apple-system,sans-serif; --display:'Sora',var(--sans);
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;}
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;}
+.brand{display:flex;align-items:center;gap:12px;}
+.brand .mark{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--gold),#8a6d2e);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;color:#0a0d14;font-size:13px;letter-spacing:.5px;}
+.brand h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.1px;font-family:var(--display);}
+.brand small{display:block;color:var(--ink-dim);font-size:11px;font-family:var(--mono);margin-top:2px;}
+.role-pill{display:flex;align-items:center;gap:10px;}
+.role-pill span{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:20px;border:1px solid var(--line);color:var(--ink-dim);}
+.role-pill span.admin{color:var(--gold);border-color:var(--gold);}
+.role-pill button{background:transparent;border:1px solid var(--line);color:var(--ink-dim);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans);}
+.role-pill button:hover{border-color:var(--ink-dim);color:var(--ink);}
+
+/* KPI STRIP */
+.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border-bottom:1px solid var(--line);}
+.kpi-card{background:var(--panel);padding:16px 22px;display:flex;flex-direction:column;gap:6px;}
+.kpi-card .kpi-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-dim);font-family:var(--mono);}
+.kpi-card .kpi-value{font-family:var(--display);font-size:26px;font-weight:700;display:flex;align-items:baseline;gap:6px;}
+.kpi-card .kpi-value small{font-size:13px;color:var(--ink-dim);font-weight:500;font-family:var(--sans);}
+.kpi-card.warn .kpi-value{color:var(--red);}
+.kpi-card.good .kpi-value{color:var(--teal);}
+.kpi-card.gold .kpi-value{color:var(--gold);}
+
+/* LOGIN GATE */
+#gate{position:fixed;inset:0;background:radial-gradient(ellipse at top,#dde3ee,var(--bg) 60%);display:flex;align-items:center;justify-content:center;z-index:100;}
+.gate-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:38px 42px;width:400px;box-shadow:0 8px 40px rgba(0,0,0,.12);}
+.gate-card .gate-mark{width:40px;height:40px;border-radius:9px;background:linear-gradient(135deg,var(--gold),#8a6d2e);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;color:#0a0d14;font-size:14px;margin-bottom:18px;}
+.gate-card h2{margin:0 0 4px;font-size:21px;font-family:var(--display);font-weight:700;}
+.gate-card p{color:var(--ink-dim);font-size:12.5px;margin:0 0 24px;}
+.role-choice{display:flex;gap:10px;margin-bottom:16px;}
+.role-choice button{flex:1;padding:14px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;font-size:13px;font-weight:600;transition:.15s;font-family:var(--sans);}
+.role-choice button.sel{border-color:var(--gold);background:rgba(201,162,75,.1);}
+.gate-card input{width:100%;padding:10px 12px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13px;margin-bottom:14px;}
+.gate-card label{font-size:11.5px;color:var(--ink-dim);display:block;margin-bottom:6px;font-family:var(--mono);}
+.gate-go{width:100%;padding:11px;border-radius:7px;border:none;background:var(--gold);color:#0a0d14;font-weight:700;cursor:pointer;font-size:13.5px;font-family:var(--sans);}
+.gate-go:hover{filter:brightness(1.08);}
+.gate-err{color:var(--red);font-size:12px;margin:-6px 0 12px;}
+
+/* Generic modal (Excel import, confirmations) */
+.modal-overlay{position:fixed;inset:0;background:rgba(26,32,53,.45);z-index:90;display:flex;align-items:center;justify-content:center;}
+.modal-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:26px 28px;width:400px;box-shadow:0 8px 40px rgba(0,0,0,.14);}
+.modal-card h3{margin:0 0 10px;font-family:var(--display);font-size:16.5px;display:flex;align-items:center;gap:8px;}
+.modal-card p{color:var(--ink-dim);font-size:13px;line-height:1.6;margin:0 0 20px;}
+.modal-card .modal-summary{background:var(--panel2);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:12px;color:var(--ink);margin:-8px 0 18px;}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.modal-actions .btn{flex:1;min-width:110px;}
+
+/* LAYOUT */
+.app{display:flex;height:calc(100vh - 57px - 73px);}
+.sidebar{width:252px;border-right:1px solid var(--line);background:var(--panel);padding:20px 16px;overflow-y:auto;flex-shrink:0;}
+.sidebar h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-dim);margin:20px 0 9px;font-family:var(--mono);}
+.sidebar h3:first-child{margin-top:0;}
+select,.searchbox{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:12.5px;margin-bottom:4px;font-family:var(--sans);}
+.stat-row{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-dim);padding:6px 2px;border-bottom:1px solid var(--line);}
+.stat-row b{color:var(--ink);font-family:var(--mono);}
+.legend{display:flex;flex-direction:column;gap:7px;margin-top:6px;}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim);}
+.legend-dot{width:10px;height:10px;border-radius:3px;}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:0;}
+.scroll-region{flex:1;overflow-y:auto;overflow-x:hidden;}
+.toolbar{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:20;}
+.toolbar input{flex:1;max-width:280px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:12.5px;}
+.btn{padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;font-size:12.5px;font-weight:600;font-family:var(--sans);}
+.btn:hover{border-color:var(--gold);}
+.btn.primary{background:var(--gold);color:#0a0d14;border:none;}
+.btn.primary:hover{filter:brightness(1.08);}
+.spacer{flex:1;}
+
+.gantt-wrap{padding:14px 22px 60px;}
+
+/* Fixed month axis pinned just under toolbar */
+.month-axis-wrap{position:sticky;top:53px;z-index:25;background:var(--panel2);overflow-x:auto;overflow-y:hidden;margin:0 22px;border-radius:8px 8px 0 0;border:1px solid var(--line);scrollbar-width:none;}
+.month-axis-wrap::-webkit-scrollbar{display:none;}
+.month-axis-inner{display:grid;grid-template-columns:260px 1fr;}
+.month-axis-inner .g-label{border-right:1px solid var(--line);font-size:10px;color:var(--ink-dim);padding:9px 12px;display:flex;align-items:center;justify-content:center;text-transform:uppercase;letter-spacing:.05em;}
+.month-axis-inner .g-week-head{height:100%;}
+
+/* Sticky horizontal scrollbar pinned to bottom of viewport while scrolling vertically */
+.sticky-hscroll{flex-shrink:0;background:var(--panel);border-top:1px solid var(--line);z-index:30;margin:0 22px 10px;display:flex;justify-content:center;gap:14px;padding:10px;}
+.hscroll-arrow{flex-shrink:0;width:120px;height:36px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;user-select:none;font-family:var(--sans);}
+.hscroll-arrow:hover{color:var(--gold);border-color:var(--gold);background:rgba(201,162,75,.08);}
+.hscroll-arrow:active{transform:scale(.97);}
+.proj-group{margin-bottom:28px;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07);}
+.proj-head{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--panel2);cursor:pointer;}
+.proj-head .chev{transition:.15s;color:var(--ink-dim);}
+.proj-head.collapsed .chev{transform:rotate(-90deg);}
+.proj-head b{font-size:14.5px;font-family:var(--display);font-weight:600;}
+.proj-head .badge{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);background:var(--bg);padding:3px 9px;border-radius:10px;}
+.proj-ring{width:34px;height:34px;flex-shrink:0;margin-left:auto;}
+.proj-ring text{font-family:var(--mono);font-weight:700;}
+
+.gantt-scroll{overflow-x:auto;scrollbar-width:none;}
+.gantt-scroll::-webkit-scrollbar{display:none;}
+.gantt-table{display:grid;min-width:var(--gantt-min-width,1100px);}
+.g-row{display:grid;grid-template-columns:260px 1fr;border-top:1px solid var(--line);}
+.g-label{padding:9px 12px;font-size:12px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:1px;cursor:pointer;}
+.g-label.sub-label{padding-left:26px;}
+.parte-row{background:var(--panel2);}
+.parte-row .g-label{cursor:default;}
+.parte-label{padding:7px 12px;}
+.parte-label .t-detail{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--teal);font-weight:700;font-family:var(--mono);}
+.g-label:hover{background:var(--panel2);}
+.g-label .t-detail{font-weight:600;color:var(--ink);}
+.g-label .t-meta{color:var(--ink-dim);font-size:10.5px;font-family:var(--mono);}
+.g-timeline{position:relative;min-height:36px;background-image:var(--month-grid,none);}
+.g-week-head{display:flex;font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);font-weight:600;}
+.g-week-head div{padding:7px 2px;text-align:center;border-right:1px solid var(--line);white-space:nowrap;overflow:hidden;text-transform:uppercase;letter-spacing:.04em;}
+.g-bar{position:absolute;border-radius:5px;cursor:pointer;display:flex;align-items:center;padding:0 8px;font-size:10px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.18);}
+/* Barra planificada: arriba, más fina, semi-transparente */
+.g-bar.plan{top:5px;height:12px;opacity:.75;border-radius:4px;}
+/* Barra real: abajo, más gruesa y sólida */
+.g-bar.real{top:22px;height:16px;border-radius:5px;}
+/* Si solo hay una barra (sin real), ocupa el centro */
+.g-bar.solo{top:7px;height:20px;}
+.g-bar.completado{background:linear-gradient(180deg,#4fb37e,var(--green));color:#fff;}
+.g-bar.encurso{background:linear-gradient(180deg,#e0b65e,var(--gold));color:#1a2035;}
+.g-bar.pendiente{background:linear-gradient(180deg,#b0b8cc,var(--gray));color:#fff;}
+.g-bar.real.atrasada{outline:2px solid var(--red);box-shadow:0 0 0 3px rgba(214,88,79,.2);}
+.g-bar:hover{outline:2px solid var(--teal);}
+/* Línea de separación entre filas dual-bar necesita más espacio */
+.g-row.dual{min-height:46px;}
+.g-timeline{position:relative;min-height:36px;background-image:var(--month-grid,none);}
+.g-row.dual .g-timeline{min-height:46px;}
+.today-line{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:5;}
+.today-line::before{content:'HOY';position:absolute;top:2px;left:4px;font-size:8px;font-family:var(--mono);color:var(--red);font-weight:700;}
+
+/* DETAIL PANEL */
+#overlay{position:fixed;inset:0;background:rgba(26,32,53,.35);display:none;z-index:60;}
+#panel{position:fixed;top:0;right:0;width:380px;height:100%;background:var(--panel);border-left:1px solid var(--line);z-index:61;display:none;flex-direction:column;}
+#panel .ph{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;}
+#panel .ph h2{font-size:16px;margin:0 0 4px;}
+#panel .ph .sub{color:var(--ink-dim);font-size:12px;font-family:var(--mono);}
+#panel .pclose{cursor:pointer;color:var(--ink-dim);font-size:18px;background:none;border:none;}
+#panel .pbody{padding:18px 20px;overflow-y:auto;flex:1;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);margin-bottom:5px;}
+.field .val{font-size:13.5px;}
+.field input,.field select,.field textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:13px;font-family:var(--sans);}
+.field textarea{min-height:70px;resize:vertical;}
+.status-tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;font-family:var(--mono);}
+.status-tag.completado{background:rgba(63,156,109,.18);color:var(--green);}
+.status-tag.encurso{background:rgba(201,162,75,.18);color:var(--gold);}
+.status-tag.pendiente{background:rgba(84,93,110,.25);color:#aab3c0;}
+.status-tag.atrasada{background:rgba(214,88,79,.18);color:var(--red);}
+#panel .pfooter{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:8px;}
+.empty-hint{color:var(--ink-dim);font-size:12.5px;text-align:center;padding:60px 20px;}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-mark">CO</div>
+    <h2>Control de Obra — Dirección</h2>
+    <p>Panel ejecutivo de seguimiento multiproyecto. Ingresá con tu rol para continuar.</p>
+    <div class="role-choice">
+      <button id="rb-admin" onclick="selRole('admin')">Administrador</button>
+      <button id="rb-view" onclick="selRole('viewer')">Consulta</button>
+    </div>
+    <div id="adminAuth" style="display:none;">
+      <label>Clave de administrador</label>
+      <input type="password" id="adminPass" placeholder="••••••">
+      <div class="gate-err" id="gateErr" style="display:none;">Clave incorrecta.</div>
+    </div>
+    <div id="viewerAuth" style="display:none;">
+      <label>Tu nombre</label>
+      <input type="text" id="viewerName" placeholder="Ej: Juan Pérez">
+    </div>
+    <button class="gate-go" id="goBtn" style="display:none;" onclick="enterApp()">Ingresar</button>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark">CO</div>
+    <div>
+      <h1>Control de Obra — Panel de Dirección</h1>
+      <small id="taskCount">— tareas</small>
+    </div>
+  </div>
+  <div class="role-pill">
+    <span id="userTag"></span>
+    <button onclick="logout()">Cambiar rol</button>
+  </div>
+</div>
+
+<div class="kpi-strip" id="kpiStrip"></div>
+
+<div class="app">
+  <div class="sidebar">
+    <h3>Filtros</h3>
+    <select id="f-proyecto" onchange="render()"><option value="">Todos los proyectos</option></select>
+    <select id="f-area" onchange="render()"><option value="">Todas las áreas</option></select>
+    <select id="f-estado" onchange="render()">
+      <option value="">Todos los estados</option>
+      <option value="Completado">Completado</option>
+      <option value="En Curso">En Curso</option>
+      <option value="Pendiente">Pendiente</option>
+    </select>
+
+    <h3>Resumen</h3>
+    <div class="stat-row"><span>Total tareas</span><b id="st-total">0</b></div>
+    <div class="stat-row"><span>✓ Completadas</span><b id="st-comp" style="color:var(--green)">0</b></div>
+    <div class="stat-row"><span>◎ En curso</span><b id="st-curso" style="color:var(--gold)">0</b></div>
+    <div class="stat-row"><span>○ Pendientes</span><b id="st-pend">0</b></div>
+    <div class="stat-row"><span>⚠ Atrasadas</span><b id="st-atras" style="color:var(--red)">0</b></div>
+
+    <h3>Leyenda</h3>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#3f9c6d"></div>Completado</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#c9a24b"></div>En Curso</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#545d6e"></div>Pendiente</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d6584f"></div>Atrasada / Hoy</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="scroll-region">
+      <div class="toolbar">
+        <input type="text" id="search" placeholder="Buscar tarea, máquina, área..." oninput="render()">
+        <div class="spacer"></div>
+        <input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none;" onchange="handleExcelFile(event)">
+        <button class="btn" id="importBtn" onclick="document.getElementById('excelFile').click()" style="display:none;">⇪ Importar Excel</button>
+        <button class="btn" onclick="init()" title="Recargar datos desde Google Sheets">↻ Actualizar</button>
+        <button class="btn" id="addBtn" onclick="openNewTask()" style="display:none;">+ Nueva tarea</button>
+      </div>
+      <div class="month-axis-wrap" id="monthAxisWrap"><div class="month-axis-inner" id="monthAxis"></div></div>
+      <div class="gantt-wrap" id="ganttWrap"></div>
+    </div>
+    <div class="sticky-hscroll" id="stickyHScroll">
+      <div class="hscroll-arrow" onclick="hscrollStep(-1)">◀ Atrás</div>
+      <div class="hscroll-arrow" onclick="hscrollStep(1)">Adelante ▶</div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay" onclick="closePanel()"></div>
+<div id="panel"></div>
+
+<script>
+const SEED = [{"id": "T1", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "OBRA CIVIL DEPOSITO", "parte": "Edificación", "detalle": "Paredes/Techos", "inicio": "2025-08-12", "fin": "2026-05-22", "inicio_real": "2025-08-24", "fin_real": "2026-06-06", "estado": "Completado", "notas": ""}, {"id": "T2", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "OBRA CIVIL DEPOSITO", "parte": "Edificación", "detalle": "Pisos-portones-caminerias-cerramientos", "inicio": "2026-05-26", "fin": "2026-07-20", "inicio_real": "2026-06-12", "fin_real": "2026-08-04", "estado": "En Curso", "notas": ""}, {"id": "T3", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "OBRA CIVIL DEPOSITO", "parte": "Planta de JP", "detalle": "Revestimientos/Cañerias", "inicio": "2026-06-13", "fin": "2026-08-18", "inicio_real": "2026-06-28", "fin_real": "2026-09-02", "estado": "En Curso", "notas": ""}, {"id": "T4", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "OBRA CIVIL DEPOSITO", "parte": "Compresor de aire", "detalle": "Compra De Compresor", "inicio": "2026-07-15", "fin": "2026-07-25", "inicio_real": "2026-07-28", "fin_real": "2026-08-09", "estado": "Pendiente", "notas": ""}, {"id": "T5", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "FINANZAS", "subproyecto": "MAQUINARIA", "parte": "Mezcladora", "detalle": "Pago", "inicio": "2026-05-18", "fin": "2026-05-22", "inicio_real": "2026-06-02", "fin_real": "2026-06-06", "estado": "Completado", "notas": ""}, {"id": "T6", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Mezcladora", "detalle": "Seguimiento entrega", "inicio": "2026-06-01", "fin": "2026-06-04", "inicio_real": "2026-06-19", "fin_real": "2026-06-21", "estado": "Completado", "notas": ""}, {"id": "T7", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Mezcladora", "detalle": "Instalación", "inicio": "2026-08-24", "fin": "2026-08-31", "inicio_real": "2026-09-07", "fin_real": "2026-09-15", "estado": "Pendiente", "notas": ""}, {"id": "T8", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Mezcladora", "detalle": "Puesta en marcha", "inicio": "2026-08-31", "fin": "2026-09-07", "inicio_real": "2026-09-15", "fin_real": "2026-09-22", "estado": "Pendiente", "notas": ""}, {"id": "T9", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "MAQUINARIA", "parte": "Ensobradora", "detalle": "Prueba de laminado en ensobradora", "inicio": "2026-07-08", "fin": "2026-07-16", "inicio_real": "2026-07-23", "fin_real": "2026-07-31", "estado": "Pendiente", "notas": ""}, {"id": "T10", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "MAQUINARIA", "parte": "Ensobradora", "detalle": "Viaje Miguel Jacobo Mendoza", "inicio": "2026-07-21", "fin": "2026-07-23", "inicio_real": "2026-08-05", "fin_real": "2026-08-07", "estado": "Pendiente", "notas": ""}, {"id": "T11", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "MAQUINARIA", "parte": "Ensobradora", "detalle": "Ultimas modificaciones pre envio", "inicio": "2026-07-23", "fin": "2026-07-24", "inicio_real": "2026-08-07", "fin_real": "2026-08-08", "estado": "Pendiente", "notas": ""}, {"id": "T12", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Ensobradora", "detalle": "Envío maquina Mendoza - Tucuman", "inicio": "2026-07-27", "fin": "2026-07-29", "inicio_real": "2026-08-11", "fin_real": "2026-08-13", "estado": "Pendiente", "notas": ""}, {"id": "T13", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Ensobradora", "detalle": "Instalación", "inicio": "2026-08-18", "fin": "2026-09-03", "inicio_real": "2026-09-02", "fin_real": "2026-09-18", "estado": "Pendiente", "notas": ""}, {"id": "T14", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Ensobradora", "detalle": "Tranporte de salida", "inicio": "2026-05-28", "fin": "2026-08-18", "inicio_real": "2026-06-12", "fin_real": "2026-09-02", "estado": "En Curso", "notas": ""}, {"id": "T15", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Ensobradora", "detalle": "Puesta en marcha", "inicio": "2026-08-19", "fin": "2026-08-24", "inicio_real": "2026-09-03", "fin_real": "2026-09-08", "estado": "Pendiente", "notas": ""}, {"id": "T16", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Codificadores", "detalle": "Elección", "inicio": "2026-07-21", "fin": "2026-08-04", "inicio_real": "2026-08-05", "fin_real": "2026-08-19", "estado": "Pendiente", "notas": ""}, {"id": "T17", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Codificadores", "detalle": "Seguimiento entrega", "inicio": "2026-08-04", "fin": "2026-08-18", "inicio_real": "2026-08-19", "fin_real": "2026-09-02", "estado": "Pendiente", "notas": ""}, {"id": "T18", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Codificadores", "detalle": "Instalación", "inicio": "2026-08-19", "fin": "2026-08-21", "inicio_real": "2026-09-03", "fin_real": "2026-09-05", "estado": "Pendiente", "notas": ""}, {"id": "T19", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Laminado (sobres)", "detalle": "Seguimiento entrega", "inicio": "2026-04-15", "fin": "2026-07-03", "inicio_real": "2026-04-30", "fin_real": "2026-07-18", "estado": "En Curso", "notas": ""}, {"id": "T20", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Laminado (sobres)", "detalle": "Elaboración  muestra", "inicio": "2026-04-15", "fin": "2026-06-03", "inicio_real": "2026-04-30", "fin_real": "2026-06-18", "estado": "Completado", "notas": ""}, {"id": "T21", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Laminado (sobres)", "detalle": "Impresión", "inicio": "2026-06-03", "fin": "2026-07-08", "inicio_real": "2026-06-18", "fin_real": "2026-07-23", "estado": "En Curso", "notas": ""}, {"id": "T22", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Laminado (sobres)", "detalle": "Envío a planta Tucuman", "inicio": "2026-07-10", "fin": "2026-07-13", "inicio_real": "2026-07-25", "fin_real": "2026-07-28", "estado": "Pendiente", "notas": ""}, {"id": "T23", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Display", "detalle": "Colocación OC", "inicio": "2026-07-01", "fin": "2026-07-08", "inicio_real": "2026-07-16", "fin_real": "2026-07-23", "estado": "Pendiente", "notas": ""}, {"id": "T24", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Display", "detalle": "Seguimiento entrega", "inicio": "2026-07-08", "fin": "2026-08-12", "inicio_real": "2026-07-23", "fin_real": "2026-08-27", "estado": "Pendiente", "notas": ""}, {"id": "T25", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Display", "detalle": "Envío a planta Tucuman", "inicio": "2026-08-12", "fin": "2026-08-14", "inicio_real": "2026-08-27", "fin_real": "2026-08-29", "estado": "Pendiente", "notas": ""}, {"id": "T26", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Cajas", "detalle": "Colocación OC", "inicio": "2026-05-22", "fin": "2026-05-26", "inicio_real": "2026-06-06", "fin_real": "2026-06-10", "estado": "Completado", "notas": ""}, {"id": "T27", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Cajas", "detalle": "Seguimiento entrega", "inicio": "2026-05-22", "fin": "2026-06-26", "inicio_real": "2026-06-06", "fin_real": "2026-07-11", "estado": "Completado", "notas": ""}, {"id": "T28", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Cajas", "detalle": "Envío a planta Tucuman", "inicio": "2026-06-22", "fin": "2026-06-28", "inicio_real": "2026-07-07", "fin_real": "2026-07-13", "estado": "Completado", "notas": ""}, {"id": "T29", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "RRHH", "subproyecto": "MO", "parte": "Personal", "detalle": "Reclutamiento", "inicio": "2026-07-01", "fin": "2026-07-31", "inicio_real": "2026-07-16", "fin_real": "2026-08-15", "estado": "Pendiente", "notas": ""}, {"id": "T30", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "RRHH", "subproyecto": "MO", "parte": "Personal", "detalle": "Ingreso", "inicio": "2026-08-31", "fin": "2026-09-01", "inicio_real": "2026-09-15", "fin_real": "2026-09-16", "estado": "Pendiente", "notas": ""}, {"id": "T31", "proyecto": "J. En Polvo", "planta": "TUCUMAN", "area": "RRHH", "subproyecto": "MO", "parte": "Personal", "detalle": "Capacitación", "inicio": "2026-09-01", "fin": "2026-09-07", "inicio_real": "2026-09-16", "fin_real": "2026-09-22", "estado": "Pendiente", "notas": ""}, {"id": "T32", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "INSUMOS MP", "parte": "Capsulas", "detalle": "Envio Botellas +Capsulas Comunes P/Prueba a Encapsuladora", "inicio": "2026-05-18", "fin": "2026-05-27", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T33", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "INSUMOS MP", "parte": "Capsulas", "detalle": "Luego Confirmar Largo De Capsula Para Imprimir", "inicio": "2026-05-28", "fin": "2026-06-08", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T34", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Capsulas", "detalle": "Envío Oc + Elab Herramental", "inicio": "2026-05-12", "fin": "2026-06-13", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T35", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "INSUMOS MP", "parte": "Capsulas", "detalle": "Muestra Capsula Fernando Puro", "inicio": "2026-06-13", "fin": "2026-06-15", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T36", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "INSUMOS MP", "parte": "Capsulas", "detalle": "Envío 1Ra Muestra Fernando Puro", "inicio": "2026-06-16", "fin": "2026-06-16", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T37", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "INSUMOS MP", "parte": "Capsulas", "detalle": "Impresión Todo Pedido", "inicio": "2026-06-17", "fin": "2026-06-29", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T38", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "INSUMOS MP", "parte": "Preforma", "detalle": "A Definir Gramaje, 54,7 - 31 - 34 - 37,2?", "inicio": "2026-06-18", "fin": "2026-07-03", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T39", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900", "detalle": "Polímeros", "inicio": "2026-04-15", "fin": "2026-05-28", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T40", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "CALIDAD", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900 - VODKA C/LIMON", "detalle": "RNPA BS AS dado de alta en 2do orden TUC", "inicio": "2026-05-15", "fin": "2026-05-27", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T41", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "CALIDAD", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900- FERNET", "detalle": "Sale c/Expte Bs As", "inicio": "2026-06-01", "fin": "2026-06-02", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T42", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "CALIDAD", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900- FERNET C/COLA", "detalle": "Sale c/Expte Bs As", "inicio": "2026-06-02", "fin": "2026-06-03", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T43", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "CALIDAD", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900 - GIN", "detalle": "Sale c/Expte Bs As", "inicio": "2026-06-03", "fin": "2026-06-04", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T44", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "MKT", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900", "detalle": "Aprobación", "inicio": "2026-05-26", "fin": "2026-06-30", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T45", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900", "detalle": "Definición Proveedor resto etiquetas", "inicio": "2026-05-28", "fin": "2026-06-02", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T46", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900", "detalle": "Impresión", "inicio": "2026-06-03", "fin": "2026-07-25", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T47", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "INSUMOS MP", "parte": "Etiquetas Axis Alcohol 900", "detalle": "Envío a planta Tucuman", "inicio": "2026-06-29", "fin": "2026-07-01", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T48", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "MAQUINARIA", "parte": "Encapsuladora", "detalle": "Viaje Miguel Jacobo/Mariano-Bs As", "inicio": "2026-06-03", "fin": "2026-06-05", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T49", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "MAQUINARIA", "parte": "Encapsuladora", "detalle": "Prueba", "inicio": "2026-06-03", "fin": "2026-06-04", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T50", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "MAQUINARIA", "parte": "Encapsuladora", "detalle": "Ultimos Detalles-Modificaciones", "inicio": "2026-06-05", "fin": "2026-06-30", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T51", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Encapsuladora", "detalle": "Envío Encapsuladora", "inicio": "2026-07-01", "fin": "2026-07-03", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T52", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Encapsuladora", "detalle": "Transporte Encapsuladora", "inicio": "2026-05-14", "fin": "2026-08-18", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T53", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Encapsuladora", "detalle": "Instalacion transporte", "inicio": "2026-08-18", "fin": "2026-08-27", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T54", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Encapsuladora", "detalle": "Instalación", "inicio": "2026-08-18", "fin": "2026-08-29", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T55", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "BOTELLA900", "parte": "Moldes", "detalle": "Moldes", "inicio": "2026-03-02", "fin": "2026-04-24", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T56", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "BOTELLA900", "parte": "Moldes", "detalle": "Revisión Molde P/Fabricabte", "inicio": "2026-04-25", "fin": "2026-05-19", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T57", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "BOTELLA900", "parte": "Moldes", "detalle": "Modificación de moldes - error provedor", "inicio": "2026-05-19", "fin": "2026-05-27", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T58", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "BOTELLA900", "parte": "Moldes", "detalle": "Prueba Molde con 54,7", "inicio": "2026-05-27", "fin": "2026-05-28", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T59", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "BOTELLA900", "parte": "Moldes", "detalle": "2da Prueba Molde con 56,6", "inicio": "2026-06-01", "fin": "2026-06-05", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T60", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "BOTELLA900", "parte": "Moldes", "detalle": "Amcor: simulac de fondo nva bot petaloide 900", "inicio": "2026-06-17", "fin": "2026-06-24", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T61", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "BOTELLA900", "parte": "Moldes", "detalle": "Reforma molde p/fondo petaloide", "inicio": "2026-06-24", "fin": "2026-07-15", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T62", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "BOTELLA900", "parte": "Moldes", "detalle": "Envío a planta Tucuman", "inicio": "2026-07-16", "fin": "2026-07-20", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T63", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Seguimiento entrega", "inicio": "2026-04-10", "fin": "2026-06-30", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T64", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "DESPACHANTE", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Llegada al puerto", "inicio": "2026-05-07", "fin": "2026-05-22", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T65", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "DESPACHANTE", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Estadío depósito fiscal", "inicio": "2026-05-22", "fin": "2026-05-29", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T66", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "FINANZAS", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "pago Flete maritico", "inicio": "2026-05-26", "fin": "2026-05-27", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T67", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "ADM/FZAS", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Pago VEP antc trib aduanero", "inicio": "2026-05-28", "fin": "2026-06-01", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T68", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "ADM/FZAS", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Pago Honorarios Despachande Aduana", "inicio": "2026-05-28", "fin": "2026-06-01", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T69", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "DESPACHANTE", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "inspeccion SENASA", "inicio": "2026-06-02", "fin": "2026-06-04", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T70", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "DESPACHANTE", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Liberacion Aduana", "inicio": "2026-06-04", "fin": "2026-06-05", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T71", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Envío a PSI + Revisión maquina + ajustes", "inicio": "2026-06-05", "fin": "2026-06-23", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T72", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Envio a planta TUC", "inicio": "2026-06-24", "fin": "2026-06-27", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T73", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MAQUINARIA", "parte": "Trine", "detalle": "Puesta a punto e instalación", "inicio": "2026-07-13", "fin": "2026-07-20", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T74", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Herramentales Trine Axis 900", "detalle": "Seguimiento entrega", "inicio": "2026-06-08", "fin": "2026-06-22", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T75", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Herramentales Trine Puro 900", "detalle": "Seguimiento entrega", "inicio": "2026-06-15", "fin": "2026-06-29", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T76", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Herramentales Trine Fernando 1000", "detalle": "Seguimiento entrega", "inicio": "2026-06-22", "fin": "2026-07-06", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T77", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MAQUINARIA", "parte": "Herramentales Trine Torasso 1500", "detalle": "Seguimiento entrega", "inicio": "2026-06-29", "fin": "2026-07-13", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T78", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "MOLDE", "parte": "Formato 500", "detalle": "Formato B&h 500 para L2", "inicio": "2026-05-21", "fin": "2026-07-10", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T79", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MIGRACION", "parte": "Migración L3", "detalle": "Repuestos", "inicio": "2026-05-20", "fin": "2026-07-06", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T80", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "PRODUCCION", "subproyecto": "MIGRACION", "parte": "PARADA 7 DIAS", "detalle": "MO", "inicio": "2026-06-29", "fin": "2026-07-06", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T81", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "MIGRACION", "parte": "preformas", "detalle": "500-900 puro-900 axis-1000-1500", "inicio": "2026-06-29", "fin": "2026-07-06", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T82", "proyecto": "L. 3 Alcohol", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MIGRACION", "parte": "Migración L3", "detalle": "Prueba en Llenadora Form 900", "inicio": "2026-06-29", "fin": "2026-07-06", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T83", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Horno/Enfardador", "detalle": "compra repuestos", "inicio": "2026-05-28", "fin": "2026-07-12", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T84", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Paletizadora", "detalle": "compra repuestos", "inicio": "2026-05-28", "fin": "2026-07-27", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T85", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Sopladora", "detalle": "compra repuestos", "inicio": "2026-05-28", "fin": "2026-07-12", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T86", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Etiquetadora", "detalle": "compra repuestos - ACMI al 18/06 no se avanzó con el pago", "inicio": "2026-06-18", "fin": "2026-09-16", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T87", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Llenadora", "detalle": "compra repuestos", "inicio": "2026-05-28", "fin": "2026-07-14", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T88", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Carbo", "detalle": "compra repuestos", "inicio": "2026-06-18", "fin": "2026-07-03", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T89", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Compresor alta", "detalle": "compra repuestos", "inicio": "2026-05-21", "fin": "2026-07-05", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T90", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Compresor baja", "detalle": "compra repuestos", "inicio": "2026-06-18", "fin": "2026-07-27", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T91", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Transportes", "detalle": "compra repuestos", "inicio": "2026-06-18", "fin": "2026-07-18", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T92", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Torres de enfriamiento", "detalle": "compra repuestos", "inicio": "2026-05-21", "fin": "2026-07-15", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T93", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Sub-estación transformadora", "detalle": "compra repuestos", "inicio": "2026-05-21", "fin": "2026-06-20", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T94", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "Otros", "detalle": "compra repuestos", "inicio": "2026-05-21", "fin": "2026-07-05", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T95", "proyecto": "L.1 Mantenimiento", "planta": "TUCUMAN", "area": "MANTENIMIENTO", "subproyecto": "MANTENIMIENTO L1", "parte": "PARADA 14 DIAS", "detalle": "MO", "inicio": "2026-07-27", "fin": "2026-08-10", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T96", "proyecto": "Agua Short", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "AGUA B/A", "parte": "Preformas", "detalle": "500", "inicio": "2026-06-29", "fin": "2026-07-06", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T97", "proyecto": "Agua Short", "planta": "TUCUMAN", "area": "SOPLADO", "subproyecto": "AGUA B/A", "parte": "Preformas", "detalle": "1500", "inicio": "2026-06-29", "fin": "2026-07-06", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T98", "proyecto": "Limon 3000", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "GASEOSA LIMON", "parte": "Emulsiones", "detalle": "Seguimiento entrega", "inicio": "2026-06-18", "fin": "2026-07-18", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T99", "proyecto": "Limon 3001", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "GASEOSA LIMON", "parte": "Etiquetas", "detalle": "Seguimiento entrega", "inicio": "2026-06-08", "fin": "2026-07-23", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T100", "proyecto": "Limon 3002", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "GASEOSA LIMON", "parte": "Etiquetas", "detalle": "RNPA - TUC- en trámite", "inicio": "2026-06-12", "fin": "2026-07-03", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T101", "proyecto": "Limon 3003", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "GASEOSA LIMON", "parte": "Etiquetas", "detalle": "Polimero", "inicio": "2026-07-03", "fin": "2026-07-13", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T102", "proyecto": "Limon 3004", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "GASEOSA LIMON", "parte": "Etiquetas", "detalle": "Impresión", "inicio": "2026-07-13", "fin": "2026-07-26", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T103", "proyecto": "Limon 3005", "planta": "TUCUMAN", "area": "COMPRAS", "subproyecto": "GASEOSA LIMON", "parte": "Etiquetas", "detalle": "Envío a planta Tucuman", "inicio": "2026-07-26", "fin": "2026-07-29", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T104", "proyecto": "L. 2 Cardales", "planta": "BSAS", "area": "COMPRAS", "subproyecto": "LLENADORA RECIFE", "parte": "Llenadora", "detalle": "Seguimiento entrega", "inicio": "2026-01-09", "fin": "2026-07-30", "inicio_real": null, "fin_real": null, "estado": "En Curso", "notas": ""}, {"id": "T105", "proyecto": "L. 2 Cardales", "planta": "BSAS", "area": "MANTENIMIENTO", "subproyecto": "LLENADORA RECIFE", "parte": "Llenadora", "detalle": "revision maquina", "inicio": "2026-06-18", "fin": "2026-06-21", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}, {"id": "T106", "proyecto": "L. 2 Cardales", "planta": "BSAS", "area": "MANTENIMIENTO", "subproyecto": "LLENADORA RECIFE", "parte": "Llenadora", "detalle": "Definición de ubicación en planta", "inicio": "2026-07-25", "fin": "2026-07-28", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T107", "proyecto": "L. 2 Cardales", "planta": "BSAS", "area": "COMPRAS", "subproyecto": "LLENADORA RECIFE", "parte": "Llenadora", "detalle": "Envío desde Ermak", "inicio": "2026-07-27", "fin": "2026-07-31", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T108", "proyecto": "L. 2 Cardales", "planta": "BSAS", "area": "MANTENIMIENTO", "subproyecto": "LLENADORA RECIFE", "parte": "Llenadora", "detalle": "Instalación", "inicio": "2026-08-10", "fin": "2026-08-25", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T109", "proyecto": "L. 2 Cardales", "planta": "BSAS", "area": "MANTENIMIENTO", "subproyecto": "LLENADORA RECIFE", "parte": "Llenadora", "detalle": "Puesta en marcha", "inicio": "2026-08-24", "fin": "2026-08-26", "inicio_real": null, "fin_real": null, "estado": "Pendiente", "notas": ""}, {"id": "T110", "proyecto": "L. 2 Cardales", "planta": "BSAS", "area": "MANTENIMIENTO", "subproyecto": "LLENADORA RECIFE", "parte": "Botellas", "detalle": "Envio de muestra: botellas para pruebas", "inicio": "2026-05-18", "fin": "2026-05-21", "inicio_real": null, "fin_real": null, "estado": "Completado", "notas": ""}];
+let editingId = null;
+let LAST_SCROLL_X = 0;
+const ADMIN_PASSWORD = "obra2026";
+let ROLE = null, USERNAME = "";
+let TASKS = [];
+
+function selRole(r){
+  document.getElementById('rb-admin').classList.toggle('sel', r==='admin');
+  document.getElementById('rb-view').classList.toggle('sel', r==='viewer');
+  document.getElementById('adminAuth').style.display = r==='admin' ? 'block':'none';
+  document.getElementById('viewerAuth').style.display = r==='viewer' ? 'block':'none';
+  document.getElementById('goBtn').style.display = 'block';
+  document.getElementById('goBtn').dataset.role = r;
+}
+function enterApp(){
+  const r = document.getElementById('goBtn').dataset.role;
+  if(r==='admin'){
+    const p = document.getElementById('adminPass').value;
+    if(p !== ADMIN_PASSWORD){ document.getElementById('gateErr').style.display='block'; return; }
+    ROLE='admin'; USERNAME='Administrador';
+  } else {
+    const n = document.getElementById('viewerName').value.trim();
+    ROLE='viewer'; USERNAME = n || 'Invitado';
+  }
+  document.getElementById('gate').style.display='none';
+  document.getElementById('userTag').textContent = (ROLE==='admin'?'⚙ Administrador':'👁 Consulta — '+USERNAME);
+  document.getElementById('userTag').classList.toggle('admin', ROLE==='admin');
+  document.getElementById('addBtn').style.display = ROLE==='admin' ? 'inline-block':'none';
+  document.getElementById('importBtn').style.display = ROLE==='admin' ? 'inline-block':'none';
+  init();
+}
+function logout(){ location.reload(); }
+
+/* ---- Generic modal ---- */
+function showModal(html){
+  closeModal();
+  const wrap = document.createElement('div');
+  wrap.id = 'genericOverlay';
+  wrap.className = 'modal-overlay';
+  wrap.innerHTML = `<div class="modal-card">${html}</div>`;
+  document.body.appendChild(wrap);
+}
+function closeModal(){
+  const el = document.getElementById('genericOverlay');
+  if(el) el.remove();
+}
+
+/* ---- Excel import ---- */
+function normHeader(s){
+  return String(s).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+function excelDateToStr(v){
+  if(v===null || v===undefined || v==='') return null;
+  if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  const d = new Date(v);
+  return isNaN(d) ? null : d.toISOString().slice(0,10);
+}
+
+async function handleExcelFile(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){
+    showModal(`<h3>⚠ No se pudo cargar el lector de Excel</h3><p>La librería necesaria no está disponible en este momento. Verificá tu conexión e intentá de nuevo.</p>
+      <div class="modal-actions"><button class="btn primary" onclick="closeModal()">Cerrar</button></div>`);
+    evt.target.value=''; return;
+  }
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const sheetName = wb.SheetNames.find(n=>normHeader(n)==='GANTT')
+      || wb.SheetNames.find(n=>normHeader(n).includes('GANTT'))
+      || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+
+    if(!rows.length){
+      showModal(`<h3>⚠ Archivo vacío</h3><p>No se encontraron filas con datos en la hoja "${sheetName}".</p>
+        <div class="modal-actions"><button class="btn primary" onclick="closeModal()">Cerrar</button></div>`);
+      evt.target.value=''; return;
+    }
+
+    const headerMap = {};
+    Object.keys(rows[0]).forEach(h=>{
+      const n = normHeader(h);
+      if(n==='PROYECTO') headerMap.proyecto = h;
+      else if(n==='UN'||n==='PLANTA') headerMap.planta = h;
+      else if(n==='AREA') headerMap.area = h;
+      else if(n==='SUBPROYECTO') headerMap.subproyecto = h;
+      else if(n.includes('PARTE')) headerMap.parte = h;
+      else if(n==='DETALLE') headerMap.detalle = h;
+      else if(n==='INICIO'||n.includes('INICIO PLAN')) headerMap.inicio = h;
+      else if(n==='FIN'||n.includes('FIN PLAN')) headerMap.fin = h;
+      else if(n.includes('INICIO REAL')) headerMap.inicio_real = h;
+      else if(n.includes('FIN REAL')) headerMap.fin_real = h;
+      else if(n==='ESTADO') headerMap.estado = h;
+    });
+
+    if(!headerMap.proyecto && !headerMap.detalle){
+      showModal(`<h3>⚠ No reconozco las columnas</h3><p>Verificá que el archivo tenga encabezados como <b>PROYECTO</b>, <b>DETALLE</b>, <b>INICIO</b>, <b>FIN</b>, <b>ESTADO</b>.</p>
+        <div class="modal-actions"><button class="btn primary" onclick="closeModal()">Cerrar</button></div>`);
+      evt.target.value=''; return;
+    }
+
+    let nextId = Math.max(0, ...TASKS.map(t=>parseInt((t.id||'T0').slice(1))||0)) + 1;
+    const imported = rows.map(r=>{
+      const proyecto = headerMap.proyecto ? String(r[headerMap.proyecto]||'').trim() : '';
+      const detalle = headerMap.detalle ? String(r[headerMap.detalle]||'').trim() : '';
+      if(!proyecto && !detalle) return null;
+      return {
+        id: 'T'+(nextId++),
+        proyecto,
+        planta: headerMap.planta ? String(r[headerMap.planta]||'').trim() : '',
+        area: headerMap.area ? String(r[headerMap.area]||'').trim() : '',
+        subproyecto: headerMap.subproyecto ? String(r[headerMap.subproyecto]||'').trim() : '',
+        parte: headerMap.parte ? String(r[headerMap.parte]||'').trim() : '',
+        detalle,
+        inicio: headerMap.inicio ? excelDateToStr(r[headerMap.inicio]) : null,
+        fin: headerMap.fin ? excelDateToStr(r[headerMap.fin]) : null,
+        inicio_real: headerMap.inicio_real ? excelDateToStr(r[headerMap.inicio_real]) : null,
+        fin_real: headerMap.fin_real ? excelDateToStr(r[headerMap.fin_real]) : null,
+        estado: headerMap.estado ? (String(r[headerMap.estado]||'').trim() || 'Pendiente') : 'Pendiente',
+        notas: ''
+      };
+    }).filter(Boolean);
+
+    if(!imported.length){
+      showModal(`<h3>⚠ Sin filas válidas</h3><p>El archivo no contiene filas con datos de Proyecto o Detalle para importar.</p>
+        <div class="modal-actions"><button class="btn primary" onclick="closeModal()">Cerrar</button></div>`);
+      evt.target.value=''; return;
+    }
+
+    window._pendingImport = imported;
+    window._pendingSheetName = sheetName;
+    showModal(`
+      <h3>📥 Importar desde Excel</h3>
+      <div class="modal-summary">Hoja: ${sheetName}<br>Tareas detectadas: ${imported.length}</div>
+      <p>¿Cómo querés aplicar esta importación?</p>
+      <div class="modal-actions">
+        <button class="btn primary" onclick="confirmImport('replace')">Reemplazar todo</button>
+        <button class="btn" onclick="confirmImport('append')">Agregar a lo existente</button>
+        <button class="btn" onclick="closeModal()" style="color:var(--red);border-color:rgba(214,88,79,.4)">Cancelar</button>
+      </div>`);
+    evt.target.value='';
+  }catch(err){
+    console.error(err);
+    showModal(`<h3>⚠ Error al leer el archivo</h3><p>No pudimos procesar el Excel. Verificá que sea un archivo .xlsx válido y volvé a intentar.</p>
+      <div class="modal-actions"><button class="btn primary" onclick="closeModal()">Cerrar</button></div>`);
+    evt.target.value='';
+  }
+}
+
+async function confirmImport(mode){
+  const imported = window._pendingImport || [];
+  if(mode==='replace') TASKS = imported;
+  else TASKS = TASKS.concat(imported);
+  await saveTasks();
+  closeModal();
+  render();
+  showModal(`<h3>✓ Importación completa</h3><p>Se cargaron <b>${imported.length}</b> tareas desde "${window._pendingSheetName}". Todos los perfiles de Consulta ya ven la información actualizada.</p>
+    <div class="modal-actions"><button class="btn primary" onclick="closeModal()">Listo</button></div>`);
+  window._pendingImport = null;
+}
+
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxSpfx5egmejmjKvjJwoy5FXaTZeyKHGTES48yRk81cKWiVFcB-62chweA12TW8XBJi/exec';;
+
+async function loadTasks(){
+  try{
+    showLoadingBanner('Cargando datos desde Google Sheets...');
+    const res = await fetch(SHEETS_URL);
+    const data = await res.json();
+    if(Array.isArray(data) && data.length > 0){
+      TASKS = data;
+    } else {
+      TASKS = JSON.parse(JSON.stringify(SEED));
+    }
+  }catch(e){
+    console.error('Error cargando desde Sheets:', e);
+    TASKS = JSON.parse(JSON.stringify(SEED));
+    showModal(`<h3>⚠ Sin conexión a Google Sheets</h3>
+      <p>No se pudo conectar. Se muestran los datos locales del último Excel importado.</p>
+      <div class="modal-actions"><button class="btn primary" onclick="closeModal()">Entendido</button></div>`);
+  } finally {
+    hideLoadingBanner();
+  }
+}
+
+async function saveTasks(){
+  // Los cambios se guardan editando el Google Sheet directamente.
+  // El botón "Importar Excel" sigue disponible para el admin.
+}
+
+function showLoadingBanner(msg){
+  let b = document.getElementById('loadingBanner');
+  if(!b){
+    b = document.createElement('div');
+    b.id = 'loadingBanner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:200;background:var(--gold);color:#1a2035;text-align:center;padding:10px;font-size:13px;font-family:var(--mono);font-weight:600;';
+    document.body.appendChild(b);
+  }
+  b.textContent = msg;
+  b.style.display = 'block';
+}
+function hideLoadingBanner(){
+  const b = document.getElementById('loadingBanner');
+  if(b) b.style.display = 'none';
+}
+
+function statusClass(s){ return (s||'').toLowerCase().replace(/\s+/g,''); }
+function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+
+let TL_START, TL_END, TL_DAYS, MONTHS = [];
+const TIMELINE_FLOOR = new Date(2026, 4, 1); // Mayo 2026
+function computeTimeline(){
+  const dates = TASKS.flatMap(t=>[t.inicio,t.fin,t.inicio_real,t.fin_real]).filter(Boolean).map(d=>new Date(d+'T00:00:00'));
+  if(!dates.length){ TL_START=new Date(TIMELINE_FLOOR); TL_END=new Date(TIMELINE_FLOOR); TL_DAYS=1; MONTHS=[]; return; }
+  const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
+  const rawStart = new Date(minD.getFullYear(), minD.getMonth(), 1);
+  TL_START = rawStart < TIMELINE_FLOOR ? new Date(TIMELINE_FLOOR) : rawStart;
+  TL_END = new Date(maxD.getFullYear(), maxD.getMonth()+1, 0);
+  if(TL_END < TL_START) TL_END = new Date(TL_START.getFullYear(), TL_START.getMonth()+1, 0);
+  TL_DAYS = Math.max(1, Math.round((TL_END-TL_START)/86400000)+1);
+
+  MONTHS = [];
+  let cursor = new Date(TL_START);
+  while(cursor <= TL_END){
+    const mStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const mEnd = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0);
+    const days = Math.round((mEnd-mStart)/86400000)+1;
+    MONTHS.push({
+      label: mStart.toLocaleDateString('es-AR',{month:'short',year:'2-digit'}).replace('.',''),
+      widthPct: days/TL_DAYS*100
+    });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+  }
+}
+function pct(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  return Math.max(0, Math.min(100, ((d-TL_START)/86400000)/TL_DAYS*100));
+}
+function monthGridCSS(){
+  if(!MONTHS.length) return 'none';
+  let stops = [], acc = 0;
+  MONTHS.forEach((m,i)=>{
+    if(i>0) stops.push(`var(--line) ${acc.toFixed(3)}%`, `var(--line) calc(${acc.toFixed(3)}% + 1px)`);
+    acc += m.widthPct;
+  });
+  return stops.length ? `linear-gradient(90deg, transparent 0%, ${stops.join(', ')}, transparent 100%)` : 'none';
+}
+
+function populateFilters(){
+  const mk = (id, key) => {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    const vals = [...new Set(TASKS.map(t=>t[key]).filter(Boolean))].sort();
+    sel.innerHTML = sel.options[0].outerHTML + vals.map(v=>`<option value="${v}">${v}</option>`).join('');
+    sel.value = cur;
+  };
+  mk('f-proyecto','proyecto'); mk('f-area','area');
+}
+
+function monthHeaders(){
+  return MONTHS.map(m=>`<div style="width:${m.widthPct}%;flex-shrink:0;">${m.label}</div>`).join('');
+}
+
+function isAtrasada(t){
+  if(t.estado==='Completado') return false;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fin = t.fin ? new Date(t.fin+'T00:00:00') : null;
+  return fin && fin < hoy;
+}
+
+// Diferencia en días entre fin real (o "hoy" si está en curso) y fin planificado.
+// Positivo = atraso, negativo = adelanto, null = sin datos suficientes para calcularlo.
+function desvioDias(t){
+  if(!t.fin) return null;
+  const finPlan = new Date(t.fin+'T00:00:00');
+  let finRef = null;
+  if(t.fin_real) finRef = new Date(t.fin_real+'T00:00:00');
+  else if(t.inicio_real && t.estado!=='Completado'){
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    finRef = hoy;
+  }
+  if(!finRef) return null;
+  return Math.round((finRef-finPlan)/86400000);
+}
+
+function progressRing(pct, color='#2bb3a3', size=36){
+  const r=14, c=size/2, circ=2*Math.PI*r;
+  const dash = (pct/100)*circ;
+  return `<svg class="proj-ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#dde1e9" stroke-width="3"/>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="3"
+      stroke-dasharray="${dash} ${circ}" stroke-dashoffset="${circ/4}" stroke-linecap="round"/>
+    <text x="${c}" y="${c+4}" text-anchor="middle" fill="${color}" font-size="8" font-family="JetBrains Mono,monospace" font-weight="700">${pct}%</text>
+  </svg>`;
+}
+
+function renderKPIs(tasks){
+  const hoy = new Date().toISOString().slice(0,10);
+  const total = tasks.length;
+  const comp = tasks.filter(t=>t.estado==='Completado').length;
+  const curso = tasks.filter(t=>t.estado==='En Curso').length;
+  const atras = tasks.filter(t=>isAtrasada(t)).length;
+  const proyectos = new Set(tasks.map(t=>t.proyecto)).size;
+  const avance = total ? Math.round(comp/total*100) : 0;
+  document.getElementById('kpiStrip').innerHTML = `
+    <div class="kpi-card good">
+      <div class="kpi-label">Avance global</div>
+      <div class="kpi-value">${avance}<small>%</small></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Proyectos activos</div>
+      <div class="kpi-value">${proyectos}<small>proyectos</small></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Tareas en curso</div>
+      <div class="kpi-value">${curso}<small>de ${total}</small></div>
+    </div>
+    <div class="kpi-card ${atras>0?'warn':''}">
+      <div class="kpi-label">Tareas atrasadas</div>
+      <div class="kpi-value">${atras}<small>sin completar</small></div>
+    </div>`;
+}
+
+function render(){
+  computeTimeline();
+  document.documentElement.style.setProperty('--month-grid', monthGridCSS());
+  document.documentElement.style.setProperty('--gantt-min-width', Math.max(1100, MONTHS.length*150)+'px');
+  populateFilters();
+  const fp=document.getElementById('f-proyecto').value, fa=document.getElementById('f-area').value,
+        fe=document.getElementById('f-estado').value, q=document.getElementById('search').value.toLowerCase();
+
+  const filtered = TASKS.filter(t=>
+    (!fp||t.proyecto===fp) && (!fa||t.area===fa) &&
+    (!fe||t.estado===fe) &&
+    (!q || JSON.stringify(t).toLowerCase().includes(q))
+  );
+
+  renderKPIs(filtered);
+  document.getElementById('st-total').textContent = filtered.length;
+  document.getElementById('st-comp').textContent = filtered.filter(t=>t.estado==='Completado').length;
+  document.getElementById('st-curso').textContent = filtered.filter(t=>t.estado==='En Curso').length;
+  document.getElementById('st-pend').textContent = filtered.filter(t=>t.estado==='Pendiente').length;
+  document.getElementById('st-atras').textContent = filtered.filter(t=>isAtrasada(t)).length;
+  document.getElementById('taskCount').textContent = TASKS.length + ' tareas · ' + new Set(TASKS.map(t=>t.proyecto)).size + ' proyectos';
+
+  const groups = {};
+  filtered.forEach(t=>{ (groups[t.proyecto] ??= []).push(t); });
+
+  const wrap = document.getElementById('ganttWrap');
+  if(!filtered.length){ wrap.innerHTML = '<div class="empty-hint">No hay tareas que coincidan con los filtros.</div>'; return; }
+
+  const todayStr = new Date().toISOString().slice(0,10);
+  const todayPct = pct(todayStr);
+  let html='';
+
+  Object.keys(groups).sort().forEach(proj=>{
+    const items = groups[proj];
+    const comp = items.filter(t=>t.estado==='Completado').length;
+    const atras = items.filter(t=>isAtrasada(t)).length;
+    const progress = items.length ? Math.round(comp/items.length*100) : 0;
+    const ringColor = progress===100 ? '#3f9c6d' : atras>0 ? '#d6584f' : '#2bb3a3';
+
+    const partes = {};
+    items.forEach(t=>{ (partes[t.parte||'Sin clasificar'] ??= []).push(t); });
+
+    const rowsHtml = Object.keys(partes).sort().map(parte=>{
+      const partItems = partes[parte];
+      const partHead = `<div class="g-row parte-row">
+        <div class="g-label parte-label"><span class="t-detail">⬡ ${parte}</span></div>
+        <div class="g-timeline"></div>
+      </div>`;
+      const taskRows = partItems.map(t=>{
+        const atrasada = isAtrasada(t);
+        const sc = statusClass(t.estado);
+        const hasPlan = t.inicio || t.fin;
+        const hasReal = t.inicio_real || t.fin_real;
+        const dual = hasPlan && hasReal;
+        const todayMark = todayPct>=0&&todayPct<=100 ? `<div class="today-line" style="left:${todayPct}%"></div>` : '';
+        const desv = desvioDias(t);
+        const desvLabel = desv===null ? '' : desv===0 ? '' : desv>0
+          ? `<span style="color:var(--red);font-size:9px;font-family:var(--mono);">+${desv}d</span>`
+          : `<span style="color:var(--green);font-size:9px;font-family:var(--mono);">${desv}d</span>`;
+
+        let barsHtml = '';
+        if(hasPlan){
+          const lp = pct(t.inicio||t.fin||todayStr);
+          const rp = pct(t.fin||t.inicio||todayStr);
+          const wp = Math.max(1.5, rp-lp);
+          barsHtml += `<div class="g-bar ${sc} plan${dual?'':' solo'}" style="left:${lp}%;width:${wp}%;" onclick="openTask('${t.id}')" title="Planificado: ${fmtDate(t.inicio)} → ${fmtDate(t.fin)}">${dual?'':t.detalle||''}</div>`;
+        }
+        if(hasReal){
+          const lr = pct(t.inicio_real||t.fin_real||todayStr);
+          const finRef = t.fin_real || new Date().toISOString().slice(0,10);
+          const rr = pct(finRef);
+          const wr = Math.max(1.5, rr-lr);
+          barsHtml += `<div class="g-bar real${atrasada?' atrasada':''}" style="left:${lr}%;width:${wr}%;background:linear-gradient(180deg,#e05c5c,var(--red));" onclick="openTask('${t.id}')" title="Real: ${fmtDate(t.inicio_real)} → ${fmtDate(t.fin_real)||'en curso'}">${t.detalle||''}</div>`;
+        }
+
+        return `<div class="g-row${dual?' dual':''}">
+          <div class="g-label sub-label" onclick="openTask('${t.id}')">
+            <span class="t-detail">${t.detalle||'(sin detalle)'} ${desvLabel}${atrasada&&!hasReal?' <span style="color:var(--red);font-size:10px">⚠</span>':''}</span>
+            <span class="t-meta">${t.area||''} · ${t.subproyecto||''}</span>
+          </div>
+          <div class="g-timeline">
+            ${todayMark}
+            ${barsHtml}
+          </div>
+        </div>`;
+      }).join('');
+      return partHead + taskRows;
+    }).join('');
+
+    html += `<div class="proj-group">
+      <div class="proj-head collapsed" onclick="this.classList.toggle('collapsed');this.nextElementSibling.style.display=this.classList.contains('collapsed')?'none':'block';">
+        <span class="chev">▾</span>
+        <b>${proj}</b>
+        <span class="badge">${items.length} tareas</span>
+        ${atras>0?`<span class="badge" style="color:var(--red);border-color:rgba(214,88,79,.4)">⚠ ${atras} atrasada${atras>1?'s':''}</span>`:''}
+        ${progressRing(progress, ringColor)}
+      </div>
+      <div style="display:none"><div class="gantt-table">
+        ${rowsHtml}
+      </div></div>
+      </div>
+    </div>`;
+  });
+  wrap.innerHTML = html;
+
+  // Global sticky month axis (replaces per-project header rows)
+  GANTT_CONTENT_WIDTH = Math.max(1100, MONTHS.length*150);
+  document.getElementById('monthAxis').innerHTML =
+    `<div class="g-label">PARTE / MÁQUINA — DETALLE</div><div class="g-timeline"><div class="g-week-head">${monthHeaders()}</div></div>`;
+  document.getElementById('monthAxis').style.width = GANTT_CONTENT_WIDTH+'px';
+  document.getElementById('monthAxisWrap').style.top = document.querySelector('.toolbar').offsetHeight+'px';
+
+  setupSyncedScroll();
+}
+
+let SYNCING = false;
+let GANTT_CONTENT_WIDTH = 1100;
+function getScrollers(){
+  return [...document.querySelectorAll('.gantt-scroll'), document.getElementById('monthAxisWrap')];
+}
+function applyScrollX(x){
+  const ref = getScrollers()[0];
+  const viewportW = ref ? ref.clientWidth : 800;
+  const maxScroll = Math.max(0, GANTT_CONTENT_WIDTH - viewportW);
+  LAST_SCROLL_X = Math.max(0, Math.min(maxScroll, x));
+  SYNCING = true;
+  getScrollers().forEach(el=>{ el.scrollLeft = LAST_SCROLL_X; });
+  SYNCING = false;
+}
+function hscrollStep(dir){
+  applyScrollX(LAST_SCROLL_X + dir*320);
+}
+function setupSyncedScroll(){
+  const scrollers = getScrollers();
+  scrollers.forEach(el=>{ el.scrollLeft = LAST_SCROLL_X; });
+  scrollers.forEach(el=>{
+    el.addEventListener('scroll', ()=>{
+      if(SYNCING) return;
+      SYNCING = true;
+      LAST_SCROLL_X = el.scrollLeft;
+      scrollers.forEach(other=>{ if(other!==el) other.scrollLeft = LAST_SCROLL_X; });
+      SYNCING = false;
+    });
+  });
+}
+
+function openTask(id){
+  editingId = id;
+  const t = TASKS.find(x=>x.id===id);
+  if(!t) return;
+  const ro = ROLE!=='admin';
+  const atrasada = isAtrasada(t);
+  const sc = statusClass(t.estado);
+  const diasPlan = (t.inicio&&t.fin) ? Math.round((new Date(t.fin+'T00:00:00')-new Date(t.inicio+'T00:00:00'))/86400000) : null;
+  const diasReal = (t.inicio_real&&t.fin_real) ? Math.round((new Date(t.fin_real+'T00:00:00')-new Date(t.inicio_real+'T00:00:00'))/86400000) : null;
+  const desv = desvioDias(t);
+  const headerColors = {completado:'#3f9c6d', encurso:'#c9a24b', pendiente:'#545d6e'};
+  const hColor = atrasada ? '#d6584f' : (headerColors[sc]||'#545d6e');
+
+  let desvBadge = '';
+  if(desv !== null){
+    if(desv === 0) desvBadge = `<span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:12px;background:rgba(63,156,109,.15);color:var(--green);">✓ Sin desvío</span>`;
+    else if(desv > 0) desvBadge = `<span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:12px;background:rgba(214,88,79,.15);color:var(--red);">⚠ +${desv} días de atraso</span>`;
+    else desvBadge = `<span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:12px;background:rgba(63,156,109,.15);color:var(--green);">▲ ${Math.abs(desv)} días de adelanto</span>`;
+  }
+
+  document.getElementById('overlay').style.display='block';
+  const panel = document.getElementById('panel');
+  panel.style.display='flex';
+  panel.innerHTML = `
+    <div class="ph" style="border-left:4px solid ${hColor};padding-left:16px;">
+      <div style="flex:1">
+        <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--ink-dim);margin-bottom:4px;letter-spacing:.06em">${t.proyecto}</div>
+        <h2 style="font-family:var(--display);font-size:15px;line-height:1.3">${t.detalle||'Tarea'}</h2>
+        <div class="sub" style="margin-top:4px">${t.parte||''} ${t.subproyecto?'· '+t.subproyecto:''}</div>
+      </div>
+      <button class="pclose" onclick="closePanel()">✕</button>
+    </div>
+    <div class="pbody">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <span class="status-tag ${sc}${atrasada?' atrasada':''}">${atrasada?'⚠ ATRASADA':t.estado}</span>
+        <span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:12px;background:var(--panel2);color:var(--ink-dim);">${t.area||'Sin área'}</span>
+        ${desvBadge}
+      </div>
+
+      <!-- PLANIFICADO -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-dim);font-family:var(--mono);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <span style="display:inline-block;width:28px;height:6px;border-radius:3px;background:var(--gold);opacity:.75;"></span>PLANIFICADO
+          ${diasPlan!==null?`<span style="color:var(--ink-dim)">(${diasPlan} días)</span>`:''}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="field"><label>Inicio plan.</label>${ro?`<div class="val">${fmtDate(t.inicio)}</div>`:`<input type="date" id="ed-inicio" value="${t.inicio||''}">`}</div>
+          <div class="field"><label>Fin plan.</label>${ro?`<div class="val">${fmtDate(t.fin)}</div>`:`<input type="date" id="ed-fin" value="${t.fin||''}">`}</div>
+        </div>
+      </div>
+
+      <!-- REAL -->
+      <div style="margin-bottom:14px;padding:12px;background:var(--panel2);border-radius:8px;border:1px solid var(--line);">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-dim);font-family:var(--mono);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <span style="display:inline-block;width:28px;height:9px;border-radius:4px;background:var(--gold);"></span>REAL
+          ${diasReal!==null?`<span style="color:var(--ink-dim)">(${diasReal} días)</span>`:''}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="field"><label>Inicio real</label>${ro?`<div class="val">${fmtDate(t.inicio_real)||'—'}</div>`:`<input type="date" id="ed-inicio_real" value="${t.inicio_real||''}">`}</div>
+          <div class="field"><label>Fin real</label>${ro?`<div class="val">${fmtDate(t.fin_real)||'—'}</div>`:`<input type="date" id="ed-fin_real" value="${t.fin_real||''}">`}</div>
+        </div>
+      </div>
+
+      ${ro?'':`
+      <div class="field"><label>Estado</label>
+        <select id="ed-estado">
+          <option ${t.estado==='Pendiente'?'selected':''}>Pendiente</option>
+          <option ${t.estado==='En Curso'?'selected':''}>En Curso</option>
+          <option ${t.estado==='Completado'?'selected':''}>Completado</option>
+        </select>
+      </div>`}
+
+      <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px;">
+        <div class="field"><label>Detalle</label>${ro?`<div class="val">${t.detalle||'—'}</div>`:`<input id="ed-detalle" value="${(t.detalle||'').replace(/"/g,'&quot;')}">`}</div>
+        <div class="field"><label>Parte / Máquina</label>${ro?`<div class="val">${t.parte||'—'}</div>`:`<input id="ed-parte" value="${(t.parte||'').replace(/"/g,'&quot;')}">`}</div>
+        <div class="field"><label>Proyecto</label>${ro?`<div class="val">${t.proyecto||'—'}</div>`:`<input id="ed-proyecto" value="${(t.proyecto||'').replace(/"/g,'&quot;')}">`}</div>
+        <div class="field"><label>Subproyecto</label>${ro?`<div class="val">${t.subproyecto||'—'}</div>`:`<input id="ed-subproyecto" value="${(t.subproyecto||'').replace(/"/g,'&quot;')}">`}</div>
+        <div class="field"><label>Área</label>${ro?`<div class="val">${t.area||'—'}</div>`:`<input id="ed-area" value="${(t.area||'').replace(/"/g,'&quot;')}">`}</div>
+        <div class="field"><label>Planta</label>${ro?`<div class="val">${t.planta||'—'}</div>`:`<input id="ed-planta" value="${(t.planta||'').replace(/"/g,'&quot;')}">`}</div>
+      </div>
+
+      <div class="field" style="margin-top:4px;"><label>Notas internas</label>${ro?`<div class="val" style="color:var(--ink-dim);font-style:italic">${t.notas||'Sin notas.'}</div>`:`<textarea id="ed-notas" placeholder="Agregar notas...">${t.notas||''}</textarea>`}</div>
+    </div>
+    ${ro?'':`<div class="pfooter">
+      <button class="btn primary" style="flex:1" onclick="saveTask()">Guardar cambios</button>
+      <button class="btn" onclick="deleteTask('${t.id}')" style="color:var(--red);border-color:rgba(214,88,79,.4);">Eliminar</button>
+    </div>`}
+  `;
+}
+function closePanel(){
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('panel').style.display='none';
+  editingId=null;
+}
+async function saveTask(){
+  const t = TASKS.find(x=>x.id===editingId);
+  if(!t) return;
+  ['detalle','proyecto','subproyecto','area','planta','parte','inicio','fin','inicio_real','fin_real','notas','estado'].forEach(k=>{
+    const el = document.getElementById('ed-'+k);
+    if(el) t[k] = el.value;
+  });
+  await saveTasks();
+  closePanel(); render();
+}
+async function deleteTask(id){
+  if(!confirm('¿Eliminar esta tarea?')) return;
+  TASKS = TASKS.filter(t=>t.id!==id);
+  await saveTasks();
+  closePanel(); render();
+}
+function openNewTask(){
+  const id = 'T'+(Math.max(0,...TASKS.map(t=>parseInt(t.id.slice(1))||0))+1);
+  TASKS.push({id, proyecto:'Nuevo Proyecto', planta:'TUCUMAN', area:'', subproyecto:'', parte:'', detalle:'Nueva tarea', inicio:new Date().toISOString().slice(0,10), fin:new Date().toISOString().slice(0,10), estado:'Pendiente', notas:''});
+  render();
+  openTask(id);
+}
+
+async function init(){
+  await loadTasks();
+  render();
+}
+</script>
+</body>
+</html>
